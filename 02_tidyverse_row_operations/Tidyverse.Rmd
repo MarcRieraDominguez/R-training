@@ -1,0 +1,530 @@
+---
+title: 'R: tidyverse'
+output:
+    html_document:
+      toc: true
+      toc_float: true
+      theme: united
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# we want to print the error messages
+knitr::opts_chunk$set(error=TRUE)
+```
+
+
+# Learning resources
+
+Note that in R, there are usually multiple ways to tackle the same problem. Subsetting, filtering, renaming, etc., can also be achieved via base R.  
+
+* [R for data science (Wickham&Grolemund, 2017)](https://r4ds.had.co.nz/): a good guide to the tidyverse. Equally importantly, it can teach you about the phylosphy of tidy data, and the general "know-how" of data processing and analysis. The book has plenty of exercises for you to build "coding muscle". You can find unofficial solutions tot he exercises [here](https://jrnold.github.io/r4ds-exercise-solutions/).
+* Cheatsheets covering tidyverse topics, which you can find [online](https://www.rstudio.com/resources/cheatsheets/), or in RStudio itself (Help > Cheatsheets).
+* [Crawley (2013)](https://www.cs.upc.edu/~robert/teaching/estadistica/TheRBook.pdf): complete reference for basci coding, mathematics, statistics, etc.
+
+
+# Load libraries
+
+We get messages related to conflicts and masking, since there are functions names that are repeated across packages. Writing the package that contains our function of interest, like this: `package::function()`, can make you more mindful about the specific package and functions involved. Alternatively, you can load the `conflicted` library, which will throw an error message if you use a function with a name that is repated across packages.
+
+```{r}
+library(microbenchmark) # compare time of different functions
+library(multcomp) # to get a compact letter display (cld) when microbenchmarking
+library(tidyverse)
+```
+
+# Workflow of the script
+
+## Dataset: a modified starwars
+
+I will demonstrate most of the tidyverse functions using a simplified version of the `starwars` dataset, containing characteristics of 87 characters from the Star Wars franchise. Type `?starwars` if you want to learn more about this tibble.
+
+```{r}
+starwars
+```
+
+Let's simplify the dataset, removing the columns that contain lists (it reduces the length of `summary()` or `str()` calls), changing the type into a data frame, and keeping only the 10 first observations
+
+```{r}
+starwars2 <- 
+  starwars %>% 
+  # where() is a selection helper to select columns based on functions that return TRUE or FALSE
+  # in this case, a function that returns TRUE or FALSE depending on whether the column contains lists
+  dplyr::select(!where(is.list)) %>% 
+  data.frame() %>% 
+  # no need to keep all the columns
+  dplyr::slice(1:10)
+```
+
+
+We can explore the data frame with the `summary()` and `str()` function.
+
+```{r}
+summary(starwars2)
+str(starwars2)
+```
+
+We can explore specific properties of the data, such as the presence of missing values. Although the `summary()` function counts the number of NA's, it appears that it only does so for numerical columns.  
+We can use the `apply(X, MARGIN, FUN)` function, which applies a function (`FUN`) over the rows (`MARGIN = 1`) or columns (`MARGIN = 2`) of a matrix or data frame (`X`). In this case, we can apply a user-written function that counts the number of missing values per column.
+
+```{r}
+# it contains multiple na
+apply(starwars2, MARGIN = 2, FUN = function(x) sum(is.na(x)))
+```
+
+## The pipe `%>%`
+
+I will demonstrate functions using pipes: `%>%`. The pipe `%>%` passes the object on the left to the first argument of the function on the right. The dot `.` can be used to specify the argument to which the object is passed.
+
+Throughout the script, I will demonstrate the effect of the different functions by using the `structure()` function, or `str()` for short. Instead of writing: `str(starwars2)`, I will use the pipe:
+
+```{r}
+starwars2 %>% 
+  str()
+```
+
+Also note, the following functions will be demonstrated with a data frame, and there are additional formats for tabular data, such as tibble and data.table.
+
+
+# Filtering rows (`filter()`)
+
+The `filter()` takes a data frame, and returns a data frame with the rows filtered by a set of logical conditions on a set of columns.
+
+
+```{r}
+# keep only characters whose homeworld is Tatooine
+starwars2 %>% 
+  filter(homeworld == "Tatooine")
+
+# Keep only characters from Tatooine and that are above a certain height
+starwars2 %>% 
+  filter(homeworld == "Tatooine" & height > 170)
+```
+
+When filtering, be mindful of missing values. See below different filtering approaches that take missing values into account.
+
+```{r}
+nrow(starwars2)
+
+apply(starwars2, MARGIN = 2, FUN = function(x) sum(is.na(x)))
+
+# the table() function accepts an argument to specify whether you want data on NA
+table(starwars2$hair_color, useNA = "always")
+
+# we get only 6 rows because the NA have been filtered out
+starwars2 %>% 
+  filter(hair_color != "none")
+
+# this code yields the same result
+starwars2 %>% 
+  filter(hair_color != "none" & !is.na(hair_color))
+
+# use the OR logical operator (|) to keep characters that don't have hair or no data on hair
+starwars2 %>% 
+  filter(hair_color != "none" | is.na(hair_color))
+```
+
+
+# Summarising by groups (`group_by()` + `summarise`)
+
+The `summarise()` function takes a data frame, and returns a data frame with fewer rows. If there is no grouping variable (declared through `group_by()`), it will return a data frame with a single row summarizing all observations. `summarize()`is a synonym of `summarise`.
+
+```{r}
+mean(starwars2$height, na.rm = T)
+
+# we get the same value as in the previous base code approach, but in data frame format
+starwars2 %>% 
+  summarise(mean.height = mean(height, na.rm = T))
+```
+
+The `group_by()` function changes the type of the data that enters into `summarise()`, as well as the behavior of `summarise()`.
+
+```{r}
+str(starwars2)
+
+# Note that the type of object has changed
+starwars2 %>% 
+  group_by(homeworld) %>% 
+  str()
+
+```
+
+The `group_by()` function changes the behavior of `summarise()`: instead of providing a single summary value, it provides a summary value per category of the grouping variable.
+
+
+When using such functions, it is a good idea to think ahead: how many rows should we expect? You can use `n_distinct()` to check how many different groups are there, but beware of missing values.
+
+```{r}
+n_distinct(starwars$homeworld)
+n_distinct(starwars$homeworld, na.rm = TRUE)
+
+starwars2 %>% 
+  group_by(homeworld) %>% 
+  summarise(mean.height = mean(height, na.rm = TRUE))
+```
+
+The summarized dataset can be piped to `ggplot()` for visualization. Remember to use the plus symbol (`+`) rather than the pipe (`%>%`) inside the `ggplot()` call. A couple of functions to visualize the datasets are: `arrange()` (orders the rows of a data frame by the values of selected columns), and `desc()` (sorts in descending order: from greatest to lowest).
+
+```{r}
+# Calculate the number of characters per planet, and sort the data frame in descending order
+(star.char <-
+  starwars2 %>% 
+  filter(!is.na(homeworld)) %>% 
+  group_by(homeworld) %>% 
+  summarise(n.characters = n_distinct(name))) %>% 
+  arrange(desc(n.characters))
+```
+
+# Filtering a grouped dataset
+
+You might be interested in using the results of a summary to filter the original data. For instance, keep only data from the planets that have 2 characters.
+
+```{r}
+starwars2 %>% 
+  filter(!is.na(homeworld)) %>% 
+  group_by(homeworld) %>% 
+  filter(n_distinct(name) == 2)
+```
+
+
+# Conditional expressions (`if_else()` + `case_when()`)
+
+We can combine `mutate()` with `if_else()` or `case_when()` to create a new column, whose values depend on some logical conditions. `if_else()` handles a single logical condition (although you can evaluate multiple conditions by writing `if_else()` statements inside other `if_else()` statements); while `case_when()` can handle many logical conditions.
+
+## A single logical condition (`if_else()`)
+
+We can combine `if_else()` with `mutate()` to generate a new variable, with values that depend on the values of other variables.
+
+```{r}
+# Tatooine is a planet covered in deserts (there are others, but this code is to illustrate the function)
+starwars2 %>%
+  dplyr::select(homeworld) %>%
+  # keep the first 10 rows
+  dplyr::slice(1:10) %>%
+  dplyr::mutate(biome = if_else(
+    condition = homeworld == "Tatooine",
+    true = "desert",
+    false = "other"
+  ))
+```
+
+One could combine multiple `if_else()` statements to evaluate multiple logical conditions.
+
+```{r}
+starwars2 %>% 
+  dplyr::select(hair_color) %>% 
+  dplyr::slice(1:10) %>%
+  mutate(hair = if_else(hair_color == "blond", true = "blond", false = if_else(hair_color == "black", true = "black", false = "other")))
+```
+
+
+
+## Multiple logical conditions (`case_when()`)
+
+Luckily for us, the `case_when()` function allows to vectorise multiple `if_else()` statements. It consists of two-sided formulas: the left hand side determines the logical conditions to be evaluated, the right hand side of the formula determines the replacement values, which have to be of the same type (all of them character, all of them numeric, etc). If there is no match, the default is to return `NA`, but you can change it through `TRUE ~ your_desired_output`
+
+```{r}
+# we can re-write the previous nested if_else like this
+starwars2 %>%
+  dplyr::select(hair_color) %>%
+  dplyr::slice(1:10) %>%
+  mutate(
+    hair = case_when(
+      hair_color == "blond" ~ "blond",
+      hair_color == "black" ~ "black",
+      !is.na(hair_color) & !(hair_color %in% c("black", "blond")) ~ "other"
+      # the default behaviour in case of no match is to return NA (or NA_character_ to be consistent with the other vectors)
+      #TRUE ~ NA_character_
+    )
+  )
+
+# if there is no match, NA is returned
+starwars2 %>% 
+  dplyr::select(hair_color) %>% 
+  dplyr::slice(1:10) %>%
+  mutate(hair = case_when(hair_color == "blond" ~ "blond",
+                          hair_color == "black" ~ "black"))
+
+# this lumps together no data with different hair color
+starwars2 %>% 
+  dplyr::select(hair_color) %>% 
+  dplyr::slice(1:10) %>%
+  mutate(hair = case_when(hair_color == "blond" ~ "blond",
+                          hair_color == "black" ~ "black",
+                          TRUE ~ "other"))
+
+# this makes a differnece between no data and different hair color
+starwars2 %>% 
+  dplyr::select(hair_color) %>% 
+  dplyr::slice(1:10) %>%
+  mutate(hair = case_when(hair_color == "blond" ~ "blond",
+                          hair_color == "black" ~ "black",
+                          is.na(hair_color) ~ "no data",
+                          TRUE ~ "other"))
+```
+
+But what if we want to specify NA as the output in case there is no data? Mind you that `NA` is a logical, so you need to specify `NA_character_` if you want strings as the otuput.
+
+```{r}
+class(NA)
+class(NA_character_)
+
+# The right hand side of the formula needs to be of the same type, therefore, this won't work
+starwars2 %>% 
+  dplyr::select(hair_color) %>% 
+  dplyr::slice(1:10) %>%
+  mutate(hair = case_when(hair_color == "blond" ~ "blond",
+                          hair_color == "black" ~ "black",
+                          is.na(hair_color) ~ NA,
+                          TRUE ~ "other"))
+
+# we can specify NA_character_ so the right hand side of the formula is of consistent type
+starwars2 %>% 
+  dplyr::select(hair_color) %>% 
+  dplyr::slice(1:10) %>%
+  mutate(hair = case_when(hair_color == "blond" ~ "blond",
+                          hair_color == "black" ~ "black",
+                          is.na(hair_color) ~ NA_character_,
+                          TRUE ~ "other"))
+```
+
+
+# Computing one row at a time (`rowwise()`)
+
+The `rowwise()` function allows to compute on a data frame one row at a time. Similarly to `group_by()`, it changes how verbs operate on the data frame, and it also changes the type of the object. See some examples below for a made-up data frame containing data on temperature and precipitation recorded on 2-4 different days, across 4 sites.
+
+```{r}
+(data.row <-
+  data.frame(Site = c("Site1", "Site2", "Site3", "Site4"),
+             Temp1 = c(10, 5, 8, 6),
+             Temp2 = c(11, 6, 5, 4),
+             Temp3 = c(12, 14, 15, 16),
+             Temp4 = c(10, 4, 7, 12),
+             Prec1 = c(3, 4, 5, 6),
+             Prec2 = c(4, 2, 2, 8)))
+
+str(data.row)
+
+# the object type has changed
+data.row %>%
+  rowwise() %>% 
+  str()
+```
+
+The grouping can be undone with `ungroup` (you might need an additional function to remove the tibble class in case you don't want it).
+
+```{r}
+data.row %>%
+  rowwise() %>% 
+  ungroup() %>% 
+  str()
+```
+
+To specify which columns should be used, you may use `c()` or `c_across()` inside the function you are calling. `c_across` can be combined with tidy selection, which is always helpful.
+
+```{r}
+# Calculate the minimum value per row, mind to remove the Site column which is a factor
+data.row %>% 
+  rowwise() %>%
+  mutate(min = min(c_across(-starts_with("Site"))))
+
+# you may specify the variables of interest individually
+data.row %>% 
+  rowwise() %>%
+  mutate(min = min(c(Temp1, Temp2, Temp3)))
+
+# Calculate the minimum value per row, but only for temperature
+data.row %>% 
+  rowwise() %>%
+  mutate(min = min(c_across(starts_with("Temp"))))
+
+# You may also obtain a reduced data frame by calling summarise()
+data.row %>%
+  rowwise() %>%
+  summarise(min.temp = min(c_across(starts_with("Temp"))),
+            min.prec = min(c(Prec1, Prec2)))
+
+# Alternatively, you can keep only an identifier column, so it is preserved when you call summarise()
+data.row %>%
+  rowwise(Site) %>%
+  summarise(min.temp = min(c_across(starts_with("Temp"))),
+            min.prec = min(c(Prec1, Prec2)))
+```
+
+
+This is reminiscent of the `apply()` function, which can be applied on rows (`1`) and/or columns (`2`), through the `MARGIN` argument.
+
+```{r}
+# remove the first column, as it is a factor
+apply(data.row[, -1], MARGIN = 1, min)
+apply(data.row[, -1], MARGIN = 2, min)
+```
+
+
+# Tidying a messy dataset
+
+In the preceding examples we have performed summaries of temperature of precipitation on a row-by-row manner (`rowwise`). This is because we have the same variable spread across multiple columns. Temperature is spread across 3 columns, precipitation across 2 columns. Moreover, the day in which the measure was taken is also spread, in a somewhat cryptic way.  
+
+But what if we could re-arrange the data so that the calculation of summaries would be more straightforward? Moreover, imagine you are interested in a graph of how temperature had fluctuated across sites during those 4 days. This is difficult given the current structure of the data. What would help us is a way to re-arrange the data, such that information of a same kind (day of measurement and type of environmental variable) are in a single column.  
+
+## Re-arranging the data (`pivot_longer()`)
+
+Introducing `pivot longer`, a function that increases the number of rows and decreases the number of columns. You need to specify `cols`: columns that contain data to be pivotted to longer format (tidy selection available), `names_to`: the name of the new column that will store the column names of the selected columns, `values_to`: name of the column that will store the values of the pivotted columns. In case you are wondering, yes, there is a function that does the opposite: `pivot_wider()`.  
+You can see nice animations of the pivoting process [here](https://fromthebottomoftheheap.net/2019/10/25/pivoting-tidily/).
+
+```{r}
+(data.long <-
+  data.row %>%
+  pivot_longer(cols = starts_with(c("Temp", "Prec")),
+               values_to = "Value",
+               names_to = "temporary"))
+```
+
+## Splitting variables across multiple columns (`separate()`)
+
+We still have a problem: the day in which the measure was taken is not separated from the environmental variable. We can use `separate()`, which splits one column into multiple columns, by splitting wherever a separator character appears, or by position (through positive or negative numerical values). This function takes the name of the column to separate, and the names of the columns to separate into.
+
+```{r}
+(data.long2 <-
+  data.long %>%
+   # use numerical values: negative values start on the far right of the strings
+  separate(col = temporary, into = c("Variable", "Day"), sep = -1))
+```
+
+## The joys of working with tidy data
+
+In a long format, obtaining summaries per site or day is quite straightfoward.
+
+```{r}
+# find lowest temperature across sites
+data.long2 %>% 
+  filter(Variable == "Temp") %>% 
+  group_by(Site) %>% 
+  summarise(min = min(Value))
+
+# find lowest temperature across days
+data.long2 %>% 
+  filter(Variable == "Temp") %>% 
+  group_by(Day) %>% 
+  summarise(min = min(Value))
+```
+
+The long format is also better for plotting. The following graph, showing how temperature had fluctuated across sites during those 4 days, would be difficult to draw based on the original data.
+
+```{r}
+ggplot(data = filter(data.long2, Variable == "Temp"), aes(x = Day, y = Value, group = Site, col = Site)) +
+  geom_point() +
+  geom_line()
+```
+
+
+# Filling empty rows with information from other rows (`fill()`)
+
+A database might contain empty rows that represent that the previous entry hasn't changed. For instance, the following made-up data frame records the abundance of some trees across locations, and the blank space indicates that the species hasn't changed. The `tidyr::fill()` function takes a data.frame, a selection of columns to fill (you may use tidy selection). The `.direction` argument specifies how the missing, in this case we should specify `down`, but there are other options.
+
+```{r}
+# Wrapping the code in parentheses prints the created object
+(data.fill <-
+  data.frame(species = c("Ailanthus altissima", NA, NA, "Robinia pseudoacacia", NA, "Sambucus nigra", NA),
+             site = c("Site1", "Site2", "Site3", "Site1", "Site4", "Site2", "Site3"),
+             abundance = c(1:7)))
+
+# fill the missing values downwards (the last non-missing values is carried down)
+data.fill %>%
+  tidyr::fill(species, .direction = "down")
+```
+
+
+# Bonus: compare running time through microbenchmark
+
+Depending on the type of data operations and analyses you are performing, you might have come across situations in which you are concerned about how much time it takes to run some code. Maybe you are dealing with large databases, or have to perform the same operation many times. Or maybe you've read about a packge or function that claims to be faster than the package or funciton you are currently using.  
+
+How to test for yourself whether you can benefit from that alleged greater speed? You can use the `microbenchmark` package to compare the time it takes to run a set of expressions. If the package `multcomp`is available, a statistical ranking based on pairwise differences is displayed in the `cld` column (compact letter display).  
+
+Let's compare the running time of `if_else` (tidyverse) and `ifelse()` (base). According to the documentation, the tidyverse function is more strict, checking that the `true` and `false` are the same type. As a result, it is faster. Let's test this claim with some randomly generated vectors.
+
+```{r}
+# create vectors of different length to compare the running time between ifelse() and if_else()
+
+# runif: random uniform distribution, which you can use to generate a vector of random numbers of a specified length
+short.vector <- runif(n = 100, min = 0, max = 10^6)
+long.vector <- runif(n = 10^6, min = 0, max = 10^6)
+
+microbenchmark::microbenchmark(
+  
+    ifelse(
+    test = short.vector >= 1000,
+    yes = "greater",
+    no = "lower"
+  ),
+  
+  if_else(
+    condition = short.vector >= 1000,
+    true = "greater",
+    false = "lower"
+  ),
+
+  ifelse(
+    test = long.vector >= 1000,
+    yes = "greater",
+    no = "lower"
+  ),
+  
+  if_else(
+    condition = long.vector >= 1000,
+    true = "greater",
+    false = "lower"
+  ),
+  
+  # Number of times to evaluate the expression
+  times = 20,
+  
+  # Specify the unit in which the running time will printed. I think the default units are nanoseconds, though I am not sure
+  unit = "s"
+)
+```
+
+
+To assess the consistency of our results, let's compare the two functions again, this time using letters instead of numbers. The `letters` object contains the 26 lower-case letters of the Roman alphabet.
+
+```{r}
+short.letters <- rep(letters, 100)
+long.letters <- rep(letters, 10^5)
+
+microbenchmark::microbenchmark(
+  
+    ifelse(
+    test = short.letters == "a",
+    yes = "first letter",
+    no = "other"
+  ),
+  
+  if_else(
+    condition = short.letters == "a",
+    true = "first letter",
+    false = "other"
+  ),
+
+  ifelse(
+    test = long.letters == "a",
+    yes = "first letter",
+    no = "other"
+  ),
+  
+  if_else(
+    condition = long.letters == "a",
+    true = "first letter",
+    false = "other"
+  ),
+  
+  times = 20,
+  
+  unit = "s"
+)
+```
+
+https://stackoverflow.com/questions/68460102/mutate-inside-a-function-object-not-found
+https://stackoverflow.com/questions/26003574/use-dynamic-variable-names-in-dplyr
+https://b-rodrigues.github.io/modern_R/defining-your-own-functions.html#functions-that-take-columns-of-data-as-arguments
+https://b-rodrigues.github.io/modern_R/defining-your-own-functions.html#functions-that-take-columns-of-data-as-arguments
+
