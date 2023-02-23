@@ -1,10 +1,6 @@
 ---
 title: 'R: tidyverse'
-output:
-    html_document:
-      toc: true
-      toc_float: true
-      theme: united
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
@@ -20,12 +16,12 @@ Note that in R, there are usually multiple ways to tackle the same problem. Subs
 
 * [R for data science (Wickham&Grolemund, 2017)](https://r4ds.had.co.nz/): a good guide to the tidyverse. Equally importantly, it can teach you about the phylosphy of tidy data, and the general "know-how" of data processing and analysis. The book has plenty of exercises for you to build "coding muscle". You can find unofficial solutions tot he exercises [here](https://jrnold.github.io/r4ds-exercise-solutions/).
 * Cheatsheets covering tidyverse topics, which you can find [online](https://www.rstudio.com/resources/cheatsheets/), or in RStudio itself (Help > Cheatsheets).
-* [Crawley (2013)](https://www.cs.upc.edu/~robert/teaching/estadistica/TheRBook.pdf): complete reference for basci coding, mathematics, statistics, etc.
+* [Crawley (2013)](https://www.cs.upc.edu/~robert/teaching/estadistica/TheRBook.pdf): complete reference for basic coding, mathematics, statistics, etc.
 
 
 # Load libraries
 
-We get messages related to conflicts and masking, since there are functions names that are repeated across packages. Writing the package that contains our function of interest, like this: `package::function()`, can make you more mindful about the specific package and functions involved. Alternatively, you can load the `conflicted` library, which will throw an error message if you use a function with a name that is repated across packages.
+We get messages related to conflicts and masking, since there are functions names that are repeated across packages. Writing the package that contains our function of interest, like this: `package::function()`, can make you more mindful about the specific package and functions involved. Alternatively, you can load the `conflicted` library, which will throw an error message if you use a function with a name that is repeated across packages.
 
 ```{r}
 library(microbenchmark) # compare time of different functions
