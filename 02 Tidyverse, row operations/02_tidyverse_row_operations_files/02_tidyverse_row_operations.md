@@ -1040,7 +1040,7 @@ ggplot(data = filter(data.long2, Variable == "Temp"), aes(x = Day, y = Value, gr
   geom_line()
 ```
 
-![](02_tidyverse_row_operations_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](02_tidyverse_row_operations/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 # Filling empty rows with information from other rows (`fill()`)
 
